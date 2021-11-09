@@ -1,5 +1,4 @@
 
-aa
 
 utils::memory.limit(32000)
 library(maps)
@@ -3975,9 +3974,96 @@ index_sum_set = c('Average', 'Mahalanobis', 'Euclidean')#, 'Geometric')
 
 
 
-### compare with Epidemiological Susceptibility Risk index
+### check correlation with Epidemiological Susceptibility Risk index
 {
-  res_ALL_scores = readRDS('./Checkpoints/res_ALL_scores.rds')
+  # from paper with 17 input vars only - only PCA 2 indexes
+  df_type = 'Difference'
+  recov_met = 'TENSOR_BF'
+  final_index_FSIND17 = readRDS('./Checkpoints/res_ALL_scores.rds') %>%
+    filter(data == df_type) %>%
+    filter(method == recov_met) %>%
+    filter(algo == 'RobPCA') %>%
+    mutate(algo = paste0("FSIND17_", algo, "_dim", factor)) %>%
+    select(country, year, index, algo)
+
+  # from paper with more variables (same 17 + geo + hoefstede) - PCA and DFM both 2 indexes
+  df_type = 'Difference'
+  recov_met = 'TENSOR_BF'
+  final_index_FSIND = readRDS('C:/Users/Alessandro Bitetto/Downloads/UniPV/Charilaos/Checkpoints/res_ALL_scores.rds') %>%
+    filter(data == df_type) %>%
+    filter(method == recov_met) %>%
+    filter(algo %in% c('RobPCA', 'DFM_multivar')) %>%
+    mutate(algo = paste0("FSIND_", algo, "_dim", factor)) %>%
+    select(country, year, index, algo)
+  
+  # from ESR paper with 17 input variable - PCA and DFM with 1 index
+  df_type = 'Restricted'
+  recov_met = 'TENSOR_BF'
+  country_rename = data.frame(fsind = c("Afghanistan, Islamic Republic of", "Armenia, Republic of", "China, P.R.: Hong Kong",
+                                        "China, P.R.: Mainland", "Congo, Republic of", "Eswatini, Kingdom of", "Korea, Republic of", "Macedonia, FYR"),
+                              esr = c("Afghanistan", "Armenia", "Hong Kong SAR, China", "China", "Congo, Dem. Rep.", "Eswatini",
+                                      "Korea, Rep.", "North Macedonia"), stringsAsFactors = F)
+  final_index_ESR = readRDS('C:/Users/Alessandro Bitetto/Downloads/UniPV/Charilaos_ESR/Checkpoints/res_ALL_scores.rds') %>%
+    filter(data == df_type) %>%
+    filter(method == recov_met) %>%
+    mutate(algo = paste0("ESR_", algo)) %>%
+    left_join(country_rename, by = c("country" = "esr")) %>%
+    mutate(country = ifelse(is.na(fsind), country, fsind)) %>%
+    select(-fsind) %>%
+    select(country, year, index, algo)
+  
+  country_FSIND = final_index_FSIND$country %>% unique()
+  country_FSIND17 = final_index_FSIND17$country %>% unique()
+  country_ESR = final_index_ESR$country %>% unique()
+
+  # setdiff(country_FSIND, country_FSIND17)
+  # setdiff(country_FSIND17, country_FSIND)
+  # setdiff(country_FSIND, country_ESR)
+  # setdiff(country_ESR, country_FSIND)
+  
+  final_index_FSIND_all = final_index_FSIND17 %>%
+    bind_rows(final_index_FSIND) %>%
+    rename(index_fsind = index)
+  
+  common_country = intersect(country_FSIND, country_ESR)
+  common_year = intersect(final_index_FSIND_all$year, final_index_ESR$year)
+  res_tab = c()
+  quant_to_check = c(0.25, 0.5, 0.75)
+  for (esr_algo in final_index_ESR$algo %>% unique()){
+    
+    quant_lab = (quant_to_check * 100) %>% paste0(., "th")
+    for (fsind_algo in final_index_FSIND_all$algo %>% unique()){
+      
+      match_df = final_index_ESR %>%
+        filter(algo == esr_algo) %>%
+        select(-algo) %>%
+        left_join(final_index_FSIND_all %>%
+                    filter(algo == fsind_algo) %>%
+                    select(-algo), by = c("country", "year")) %>%
+        filter(!is.na(index)) %>%
+        filter(!is.na(index_fsind))
+      
+      if (length(common_country) * length(common_year) != nrow(match_df)){cat('\n#### rows mismatch for', esr_algo, 'vs', fsind_algo)}
+      corr_country = match_df %>%
+        group_by(country) %>%
+        summarise(corr = cor(index, index_fsind))
+      corr_country_quantile = quantile(corr_country$corr, c(0, quant_to_check , 1)) %>%
+        setNames(paste0("CorrCountry_", c("min", quant_lab, "max")))
+      corr_year = match_df %>%
+        group_by(year) %>%
+        summarise(corr = cor(index, index_fsind))
+      corr_year_quantile = quantile(corr_country$corr, c(0, quant_to_check, 1)) %>%
+        setNames(paste0("CorrYear_", c("min", quant_lab, "max")))
+      corr_all = cor(match_df$index, match_df$index_fsind)
+      
+      res_tab = res_tab %>%
+        bind_rows(data.frame(ESR = esr_algo, FSIND = fsind_algo, matched_country = match_df$country %>% uniqueN(),
+                  matched_year =match_df$year %>% uniqueN(),
+                    Corr_ALL = corr_all, t(corr_country_quantile), t(corr_year_quantile), stringsAsFactors = F))
+    } # fsind_algo
+  } # esr_algo
+
+  write.table(res_tab, './Results/5_correlation_with_ESR.csv', sep = ";", col.names = T, row.names = F, append = F, dec = ".")
 }
 
 
