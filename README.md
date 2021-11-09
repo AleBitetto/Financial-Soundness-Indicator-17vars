@@ -1,0 +1,1 @@
+# Financial-Soundness-Indicator-17vars
