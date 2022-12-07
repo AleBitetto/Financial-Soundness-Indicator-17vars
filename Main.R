@@ -4984,34 +4984,26 @@ index_sum_set = c('Average', 'Mahalanobis', 'Euclidean')#, 'Geometric')
     }
     
     # binary and continous for PCA only
-    cont_list = comp_data %>%
-      filter(algo == 'RobPCA') %>%
-      mutate(year_factor = paste0(year, '_', factor),
-             index = as.character(index)) %>%
-      select(country, year_factor, index) %>%
-      spread(year_factor, index)
-    cont_list = data.frame(t(c('Country', sort(rep(unique(comp_data$year), each = 2)))), stringsAsFactors = F) %>%
-      setNames(colnames(cont_list)) %>%
-      bind_rows(
-        data.frame(t(c('Country', rep(c('Ind 1', 'Ind 2'), uniqueN(comp_data$year)))), stringsAsFactors = F) %>%
-          setNames(colnames(cont_list)),
-        cont_list
-      )
-    write.table(cont_list, './Paper/Latex_Table_Figure/06_Cont_index_PCA_only.csv', sep = ";", col.names = F, row.names = F, append = F, dec = ".")
+    index_1_thresh = 0  # threshold to split index 1 (first PC scores)
+    index_2_thresh = 0  # threshold to split index 2 (second PC scores)
+
+    cont_list = res_ALL_scores %>%
+      left_join(country_short, by = "country") %>%
+      mutate(country = ifelse(is.na(label), country, label)) %>%
+      filter(data == df_type) %>%
+      filter(method == recov_met)  %>%
+      filter(algo %in% algo_to_plot) %>%
+      mutate(factor = paste0('Index ', factor),
+             color_id = paste0(family, '_', algo)) %>%
+      mutate(algo = replace(algo, algo == 'DFM_multivar', 'DFM')) %>%
+      select(-label) %>%
+      select(country, year, factor, index)
+      
+    bin_list = cont_list %>%
+        mutate(index = ifelse(factor == "Index 1", ifelse(index >= index_1_thresh, 1, 0), index)) %>%
+        mutate(index = ifelse(factor == "Index 2", ifelse(index >= index_2_thresh, 1, 0), index))
     
-    bin_list = comp_data %>%
-      filter(algo == 'RobPCA') %>%
-      mutate(year_factor = paste0(year, '_', factor),
-             index = as.character(ifelse(index > 0, 1, 0))) %>%
-      select(country, year_factor, index) %>%
-      spread(year_factor, index)
-    bin_list = data.frame(t(c('Country', sort(rep(unique(comp_data$year), each = 2)))), stringsAsFactors = F) %>%
-      setNames(colnames(bin_list)) %>%
-      bind_rows(
-        data.frame(t(c('Country', rep(c('Ind 1', 'Ind 2'), uniqueN(comp_data$year)))), stringsAsFactors = F) %>%
-          setNames(colnames(bin_list)),
-        bin_list
-      )
+    write.table(cont_list, './Paper/Latex_Table_Figure/06_Cont_index_PCA_only.csv', sep = ";", col.names = F, row.names = F, append = F, dec = ".")
     write.table(bin_list, './Paper/Latex_Table_Figure/07_Binary_index_PCA_only.csv', sep = ";", col.names = F, row.names = F, append = F, dec = ".")
   }
   
@@ -5720,6 +5712,7 @@ index_sum_set = c('Average', 'Mahalanobis', 'Euclidean')#, 'Geometric')
         } # algo_type
 
     
-  }
+    }
+
 }
 
